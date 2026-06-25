@@ -6,7 +6,9 @@ from firebase_config import firebase_db
 MODEL_FILE = "model.pkl"
 model = joblib.load(MODEL_FILE)
 
-def tentukan_status(air_hulu, hujan_hulu, air_lokal, hujan_lokal):
+BATAS_BAHAYA_AIR = 203  # skala 0–270 cm
+
+def buat_status_logika(air_hulu, hujan_hulu, air_lokal, hujan_lokal):
     nilai_air_tertinggi = max(air_hulu, air_lokal)
 
     if nilai_air_tertinggi >= 203:
@@ -49,21 +51,19 @@ def prediksi_dan_kirim():
     prediksi_ml = model.predict(data_baru)[0]
     probabilitas = max(model.predict_proba(data_baru)[0]) * 100
 
-    status_logika = tentukan_status(
+    status_logika = buat_status_logika(
         air_hulu,
         hujan_hulu,
         air_lokal,
         hujan_lokal
     )
 
-    if status_logika == "BAHAYA":
+    # Random Forest sebagai penentu utama
+    status_final = prediksi_ml
+
+    # Logika hanya sebagai pengaman jika air benar-benar melewati batas bahaya
+    if air_hulu >= BATAS_BAHAYA_AIR or air_lokal >= BATAS_BAHAYA_AIR:
         status_final = "BAHAYA"
-    elif status_logika == "SIAGA" and prediksi_ml in ["AMAN", "WASPADA"]:
-        status_final = "SIAGA"
-    elif status_logika == "WASPADA" and prediksi_ml == "AMAN":
-        status_final = "WASPADA"
-    else:
-        status_final = prediksi_ml
 
     waktu = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
 
@@ -78,7 +78,7 @@ def prediksi_dan_kirim():
         "probabilitas_ml": round(probabilitas, 2),
         "estimasi": buat_estimasi(status_final),
         "waktu_prediksi": waktu,
-        "sumber_data": "Random Forest Railway skala air 0-270 cm"
+        
     }
 
     db.reference("/banjir/ml").set(hasil_ml)
