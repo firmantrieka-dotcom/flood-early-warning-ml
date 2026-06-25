@@ -4,24 +4,25 @@ from datetime import datetime
 from firebase_config import firebase_db
 
 MODEL_FILE = "model.pkl"
-
 model = joblib.load(MODEL_FILE)
 
 def tentukan_status(air_hulu, hujan_hulu, air_lokal, hujan_lokal):
-    if air_lokal >= 14:
+    nilai_air_tertinggi = max(air_hulu, air_lokal)
+
+    if nilai_air_tertinggi >= 203:
         return "BAHAYA"
-    elif air_lokal >= 12 or air_hulu >= 200 or hujan_hulu >= 80 or hujan_lokal >= 80:
+    elif nilai_air_tertinggi >= 136 or hujan_hulu >= 80 or hujan_lokal >= 80:
         return "SIAGA"
-    elif air_lokal >= 8 or air_hulu >= 150 or hujan_hulu >= 40 or hujan_lokal >= 40:
+    elif nilai_air_tertinggi >= 68 or hujan_hulu >= 40 or hujan_lokal >= 40:
         return "WASPADA"
     else:
         return "AMAN"
 
 def buat_estimasi(status_final):
     if status_final == "BAHAYA":
-        return "Air di pemukiman sudah mencapai batas bahaya, banjir sudah terjadi"
+        return "Ketinggian air sudah berada pada level bahaya, potensi banjir sangat tinggi"
     elif status_final == "SIAGA":
-        return "Potensi banjir tinggi, masyarakat perlu bersiap"
+        return "Ketinggian air meningkat, masyarakat perlu bersiap"
     elif status_final == "WASPADA":
         return "Kondisi air mulai meningkat, masyarakat perlu waspada"
     else:
@@ -57,6 +58,10 @@ def prediksi_dan_kirim():
 
     if status_logika == "BAHAYA":
         status_final = "BAHAYA"
+    elif status_logika == "SIAGA" and prediksi_ml in ["AMAN", "WASPADA"]:
+        status_final = "SIAGA"
+    elif status_logika == "WASPADA" and prediksi_ml == "AMAN":
+        status_final = "WASPADA"
     else:
         status_final = prediksi_ml
 
@@ -73,7 +78,7 @@ def prediksi_dan_kirim():
         "probabilitas_ml": round(probabilitas, 2),
         "estimasi": buat_estimasi(status_final),
         "waktu_prediksi": waktu,
-        "sumber_data": "Random Forest Railway"
+        "sumber_data": "Random Forest Railway skala air 0-270 cm"
     }
 
     db.reference("/banjir/ml").set(hasil_ml)
