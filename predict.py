@@ -27,7 +27,7 @@ def buat_status_logika(air_hulu, hujan_hulu, air_lokal, hujan_lokal):
 
 def buat_estimasi_kalimat(status_final, estimasi_menit):
     if status_final == "AMAN":
-        return "Kondisi masih aman. Tidak terdapat indikasi banjir dalam waktu dekat berdasarkan prediksi Machine Learning."
+        return "Kondisi masih aman. Tidak terdapat indikasi banjir ."
 
     elif status_final == "WASPADA":
         if estimasi_menit < 60:
@@ -39,11 +39,11 @@ def buat_estimasi_kalimat(status_final, estimasi_menit):
 
     elif status_final == "SIAGA":
         if estimasi_menit < 60:
-            return f"Potensi banjir tinggi. Banjir diperkirakan terjadi sekitar {estimasi_menit} menit lagi berdasarkan prediksi Machine Learning."
+            return f"Potensi banjir tinggi. Banjir diperkirakan terjadi sekitar {estimasi_menit} menit lagi ."
         else:
             jam = estimasi_menit // 60
             menit = estimasi_menit % 60
-            return f"Potensi banjir tinggi. Banjir diperkirakan terjadi sekitar {jam} jam {menit} menit lagi berdasarkan prediksi Machine Learning."
+            return f"Potensi banjir tinggi. Banjir diperkirakan terjadi sekitar {jam} jam {menit} menit l."
 
     else:
         return "Banjir sudah terjadi atau kondisi air telah berada pada level bahaya."
