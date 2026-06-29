@@ -4,7 +4,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report
 
-DATASET_FILE = "dataset_banjir_rf_500_data.csv"
+DATASET_FILE = "dataset_banjir_rf_100_data.csv"
 MODEL_FILE = "model.pkl"
 
 df = pd.read_csv(DATASET_FILE)
