@@ -9,44 +9,46 @@ MODEL_ESTIMASI_FILE = "model_estimasi.pkl"
 model_status = joblib.load(MODEL_STATUS_FILE)
 model_estimasi = joblib.load(MODEL_ESTIMASI_FILE)
 
-BATAS_BAHAYA_AIR = 203  # skala air 0–270 cm
 
+def format_waktu_estimasi(estimasi_menit):
+    estimasi_menit = int(round(estimasi_menit))
 
-def buat_status_logika(air_hulu, hujan_hulu, air_lokal, hujan_lokal):
-    nilai_air_tertinggi = max(air_hulu, air_lokal)
+    if estimasi_menit < 0:
+        estimasi_menit = 0
 
-    if nilai_air_tertinggi >= 203:
-        return "BAHAYA"
-    elif nilai_air_tertinggi >= 136 or hujan_hulu >= 80 or hujan_lokal >= 80:
-        return "SIAGA"
-    elif nilai_air_tertinggi >= 68 or hujan_hulu >= 40 or hujan_lokal >= 40:
-        return "WASPADA"
-    else:
-        return "AMAN"
+    if estimasi_menit < 60:
+        return f"{estimasi_menit} menit"
+
+    jam = estimasi_menit // 60
+    menit = estimasi_menit % 60
+
+    if menit == 0:
+        return f"{jam} jam"
+
+    return f"{jam} jam {menit} menit"
 
 
 def buat_estimasi_kalimat(status_final, estimasi_menit):
     if status_final == "AMAN":
-        return "Kondisi masih aman. Tidak terdapat indikasi banjir ."
+        return "Kondisi masih aman. Tidak terdapat indikasi banjir dalam waktu dekat berdasarkan prediksi Machine Learning."
 
     elif status_final == "WASPADA":
-        if estimasi_menit < 60:
-            return f"Kondisi mulai meningkat. Banjir diperkirakan terjadi sekitar {estimasi_menit} menit lagi apabila hujan dan kenaikan air terus berlangsung."
-        else:
-            jam = estimasi_menit // 60
-            menit = estimasi_menit % 60
-            return f"Kondisi mulai meningkat. Banjir diperkirakan terjadi sekitar {jam} jam {menit} menit lagi apabila hujan dan kenaikan air terus berlangsung."
+        return (
+            "Kondisi mulai meningkat. Banjir diperkirakan terjadi sekitar "
+            f"{format_waktu_estimasi(estimasi_menit)} lagi apabila hujan dan kenaikan air terus berlangsung."
+        )
 
     elif status_final == "SIAGA":
-        if estimasi_menit < 60:
-            return f"Potensi banjir tinggi. Banjir diperkirakan terjadi sekitar {estimasi_menit} menit lagi ."
-        else:
-            jam = estimasi_menit // 60
-            menit = estimasi_menit % 60
-            return f"Potensi banjir tinggi. Banjir diperkirakan terjadi sekitar {jam} jam {menit} menit l."
+        return (
+            "Potensi banjir tinggi. Banjir diperkirakan terjadi sekitar "
+            f"{format_waktu_estimasi(estimasi_menit)} lagi berdasarkan prediksi Machine Learning."
+        )
+
+    elif status_final == "BAHAYA":
+        return "Banjir sudah terjadi atau kondisi air telah berada pada level bahaya."
 
     else:
-        return "Banjir sudah terjadi atau kondisi air telah berada pada level bahaya."
+        return "Status tidak diketahui."
 
 
 def prediksi_dan_kirim():
@@ -76,25 +78,12 @@ def prediksi_dan_kirim():
     if estimasi_menit < 0:
         estimasi_menit = 0
 
-    status_logika = buat_status_logika(
-        air_hulu,
-        hujan_hulu,
-        air_lokal,
-        hujan_lokal
-    )
-
-    # Random Forest sebagai penentu utama
     status_final = prediksi_ml
 
-    # Logika hanya sebagai pengaman jika air sudah melewati batas bahaya
-    if air_hulu >= BATAS_BAHAYA_AIR or air_lokal >= BATAS_BAHAYA_AIR:
-        status_final = "BAHAYA"
-        estimasi_menit = 0
-
-    # Agar kondisi AMAN tidak menampilkan prediksi "banjir beberapa jam lagi"
     if status_final == "AMAN":
         estimasi_menit_output = "-"
     elif status_final == "BAHAYA":
+        estimasi_menit = 0
         estimasi_menit_output = 0
     else:
         estimasi_menit_output = estimasi_menit
@@ -110,9 +99,7 @@ def prediksi_dan_kirim():
         "hujan_lokal": hujan_lokal,
 
         "ml_prediksi": prediksi_ml,
-        "status_logika": status_logika,
         "status_final": status_final,
-
         "probabilitas_ml": round(probabilitas, 2),
 
         "estimasi_menit": estimasi_menit_output,
