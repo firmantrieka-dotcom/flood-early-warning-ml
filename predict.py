@@ -11,10 +11,7 @@ model_estimasi = joblib.load(MODEL_ESTIMASI_FILE)
 
 
 def format_waktu_estimasi(estimasi_menit):
-    estimasi_menit = int(round(estimasi_menit))
-
-    if estimasi_menit < 0:
-        estimasi_menit = 0
+    estimasi_menit = int(estimasi_menit)
 
     if estimasi_menit < 60:
         return f"{estimasi_menit} menit"
@@ -47,8 +44,7 @@ def buat_estimasi_kalimat(status_final, estimasi_menit):
     elif status_final == "BAHAYA":
         return "Banjir sudah terjadi atau kondisi air telah berada pada level bahaya."
 
-    else:
-        return "Status tidak diketahui."
+    return "Status tidak diketahui."
 
 
 def prediksi_dan_kirim():
@@ -69,11 +65,16 @@ def prediksi_dan_kirim():
         "hujan_lokal_mm": hujan_lokal
     }])
 
-    prediksi_ml = model_status.predict(data_baru)[0]
-    probabilitas = max(model_status.predict_proba(data_baru)[0]) * 100
+    prediksi_ml = str(model_status.predict(data_baru)[0])
+
+    probabilitas = float(max(model_status.predict_proba(data_baru)[0])) * 100
 
     estimasi_pred = model_estimasi.predict(data_baru)[0]
-    estimasi_menit = int(round(estimasi_pred))
+
+    try:
+        estimasi_menit = int(float(estimasi_pred))
+    except:
+        estimasi_menit = 0
 
     if estimasi_menit < 0:
         estimasi_menit = 0
