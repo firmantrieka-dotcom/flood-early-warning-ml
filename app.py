@@ -22,7 +22,6 @@ def baca_data_sensor():
 
 def background_worker():
     global last_data
-
     print("Background worker prediksi otomatis aktif")
 
     while True:
@@ -80,4 +79,6 @@ def health():
     })
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+    import os
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
