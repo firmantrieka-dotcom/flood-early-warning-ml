@@ -3,28 +3,35 @@ import joblib
 from datetime import datetime
 from firebase_config import firebase_db
 
-# Memuat file model Machine Learning (.pkl) yang ada di repository GitHub
-MODEL_PATH = "model.pkl"  # <-- Ganti dengan nama file .pkl kamu jika berbeda (misal: rf_model.pkl)
+# PENTING: Pastikan nama file .pkl di bawah ini sama persis dengan yang ada di GitHub kamu
+MODEL_PATH = "model.pkl"  # Contoh: model.pkl atau rf_model.pkl
 
 model = None
 if os.path.exists(MODEL_PATH):
     try:
         model = joblib.load(MODEL_PATH)
-        print("Model Machine Learning (.pkl) berhasil dimuat!")
+        print("Model Machine Learning (.pkl) berhasil dimuat dengan sukses!")
     except Exception as e:
         print(f"Gagal memuat model Machine Learning: {e}")
 else:
-    print(f"Peringatan: File model '{MODEL_PATH}' tidak ditemukan di repository.")
+    print(f"Peringatan: File model '{MODEL_PATH}' tidak ditemukan di repository GitHub.")
 
 
 def format_waktu_estimasi(estimasi_menit):
-    estimasi_menit = int(estimasi_menit)
+    try:
+        estimasi_menit = int(estimasi_menit)
+    except:
+        return "0 menit"
+
     if estimasi_menit < 60:
         return f"{estimasi_menit} menit"
+
     jam = estimasi_menit // 60
     menit = estimasi_menit % 60
+
     if menit == 0:
         return f"{jam} jam"
+
     return f"{jam} jam {menit} menit"
 
 
@@ -52,30 +59,29 @@ def prediksi_dan_kirim():
     air_lokal = float(lokal.get("air", 0))
     hujan_lokal = float(lokal.get("hujan", 0))
 
-    # Nilai default jika model belum terbaca
     status_final = "AMAN"
     probabilitas = 100.0
     estimasi_menit = 0
 
     # ==========================================
-    # PREDIKSI MURNI DARI MODEL MACHINE LEARNING
+    # EKsekusi Prediksi Murni dari Model .pkl
     # ==========================================
     if model is not None:
         try:
-            # Urutan fitur harus SAMA PERSIS dengan saat kamu melatih model (training)
-            # Contoh umum: [air_hulu, hujan_hulu, air_lokal, hujan_lokal]
+            # Urutan fitur harus SAMA PERSIS dengan saat kamu melatih model (Training di Colab/Jupyter)
+            # Contoh umum urutan fitur: [air_hulu, hujan_hulu, air_lokal, hujan_lokal]
             fitur_input = [[air_hulu, hujan_hulu, air_lokal, hujan_lokal]]
 
-            # Menjalankan prediksi kelas dari model
+            # Memprediksi kelas menggunakan model
             prediksi = model.predict(fitur_input)
             status_final = str(prediksi[0])
 
-            # Mengambil tingkat keyakinan (probabilitas) jika model mendukungnya
+            # Mengambil nilai probabilitas (tingkat keyakinan) model jika ada
             if hasattr(model, "predict_proba"):
                 proba = model.predict_proba(fitur_input)
                 probabilitas = float(max(proba[0]) * 100)
 
-            # Menentukan estimasi waktu berdasarkan hasil prediksi model
+            # Menentukan estimasi waktu berdasarkan kelas hasil prediksi model
             if status_final == "BAHAYA":
                 estimasi_menit = 0
             elif status_final == "SIAGA":
@@ -86,7 +92,8 @@ def prediksi_dan_kirim():
                 estimasi_menit = 0
 
         except Exception as e:
-            print("Error saat eksekusi model Machine Learning:", e)
+            print("Error saat menjalankan model Machine Learning:", e)
+            status_final = "AMAN"
     else:
         status_final = "AMAN"
         probabilitas = 0.0
@@ -118,7 +125,7 @@ def prediksi_dan_kirim():
         "sumber_data": "Trained Machine Learning Model (.pkl)"
     }
 
-    # Mengirim hasil ke Firebase
+    # Mengirim hasil ke database Firebase
     db.reference("/banjir/ml").set(hasil_ml)
     db.reference("/banjir/status").set(status_final)
     db.reference("/banjir/update").set(waktu)
