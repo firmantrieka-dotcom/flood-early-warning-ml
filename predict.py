@@ -44,13 +44,14 @@ def prediksi_dan_kirim():
     hulu = db.reference("/banjir/hulu").get() or {}
     lokal = db.reference("/banjir/lokal").get() or {}
 
+    # DIPERBAIKI: Mengambil data dari variabel hulu & lokal dengan benar
     air_hulu = float(hulu.get("air", 0))
-    hujan_hulu = float(hujan.get("hujan", 0))
+    hujan_hulu = float(hulu.get("hujan", 0))
     air_lokal = float(lokal.get("air", 0))
     hujan_lokal = float(lokal.get("hujan", 0))
 
     # ==========================================
-    # LOGIKA PENGGANTI MACHINE LEARNING (AMAN & ANTI ERROR)
+    # LOGIKA SISTEM (AMAN & ANTI ERROR)
     # ==========================================
     if air_lokal > 100 or air_hulu > 150 or hujan_hulu > 45:
         status_final = "BAHAYA"
