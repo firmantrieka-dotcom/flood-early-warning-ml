@@ -1,83 +1,95 @@
+import os
+import joblib
 from datetime import datetime
 from firebase_config import firebase_db
 
+# Memuat file model Machine Learning (.pkl) yang ada di repository GitHub
+MODEL_PATH = "model.pkl"  # <-- Ganti dengan nama file .pkl kamu jika berbeda (misal: rf_model.pkl)
+
+model = None
+if os.path.exists(MODEL_PATH):
+    try:
+        model = joblib.load(MODEL_PATH)
+        print("Model Machine Learning (.pkl) berhasil dimuat!")
+    except Exception as e:
+        print(f"Gagal memuat model Machine Learning: {e}")
+else:
+    print(f"Peringatan: File model '{MODEL_PATH}' tidak ditemukan di repository.")
+
+
 def format_waktu_estimasi(estimasi_menit):
     estimasi_menit = int(estimasi_menit)
-
     if estimasi_menit < 60:
         return f"{estimasi_menit} menit"
-
     jam = estimasi_menit // 60
     menit = estimasi_menit % 60
-
     if menit == 0:
         return f"{jam} jam"
-
     return f"{jam} jam {menit} menit"
 
 
 def buat_estimasi_kalimat(status_final, estimasi_menit):
     if status_final == "AMAN":
-        return "Kondisi masih aman. Tidak terdapat indikasi banjir dalam waktu dekat."
-
+        return "Kondisi aman berdasarkan analisis Machine Learning."
     elif status_final == "WASPADA":
-        return (
-            "Kondisi mulai meningkat. Air lokal mulai naik, diperkirakan mencapai batas "
-            f"sekitar {format_waktu_estimasi(estimasi_menit)} lagi apabila tren kenaikan berlanjut."
-        )
-
+        return f"Waspada! Potensi kenaikan air terdeteksi oleh model, estimasi kritis sekitar {format_waktu_estimasi(estimasi_menit)} lagi."
     elif status_final == "SIAGA":
-        return (
-            "Potensi banjir tinggi karena kenaikan air lokal dan pengaruh dari hulu. "
-            f"Perkiraan waktu kritis sekitar {format_waktu_estimasi(estimasi_menit)} lagi."
-        )
-
+        return f"Siaga! Model Machine Learning mendeteksi ancaman banjir sekitar {format_waktu_estimasi(estimasi_menit)} lagi."
     elif status_final == "BAHAYA":
-        return "Banjir sudah terjadi atau ketinggian air di pemukiman telah berada pada level bahaya."
-
-    return "Status tidak diketahui."
+        return "Bahaya! Model mendeteksi status kritis atau banjir telah terjadi."
+    return "Status berdasarkan model Machine Learning."
 
 
 def prediksi_dan_kirim():
     db = firebase_db()
 
+    # Mengambil data dari sensor Firebase
     hulu = db.reference("/banjir/hulu").get() or {}
     lokal = db.reference("/banjir/lokal").get() or {}
 
     air_hulu = float(hulu.get("air", 0))
-    hujan_hulu = float(hulu.get("hujan", 0))
+    hujan_hulu = float(hujan.get("hujan", 0))
     air_lokal = float(lokal.get("air", 0))
     hujan_lokal = float(lokal.get("hujan", 0))
 
+    # Nilai default jika model belum terbaca
+    status_final = "AMAN"
+    probabilitas = 100.0
+    estimasi_menit = 0
+
     # ==========================================
-    # LOGIKA BARU SESUAI ANALISIS LAPANGAN
-    # Penentu utama: Ketinggian air lokal (pemukiman)
-    # Pendukung: Kondisi air hulu & hujan hulu
+    # PREDIKSI MURNI DARI MODEL MACHINE LEARNING
     # ==========================================
-    
-    # Status BAHAYA: Air lokal sudah sangat tinggi, atau air lokal tinggi dibarengi air hulu ekstrem
-    if air_lokal > 100 or (air_lokal > 80 and air_hulu > 130):
-        status_final = "BAHAYA"
-        estimasi_menit = 0
-        probabilitas = 95.0
+    if model is not None:
+        try:
+            # Urutan fitur harus SAMA PERSIS dengan saat kamu melatih model (training)
+            # Contoh umum: [air_hulu, hujan_hulu, air_lokal, hujan_lokal]
+            fitur_input = [[air_hulu, hujan_hulu, air_lokal, hujan_lokal]]
 
-    # Status SIAGA: Air lokal mulai naik signifikan, atau air lokal menengah tapi air hulu & hujan hulu sangat tinggi
-    elif air_lokal > 70 or (air_lokal > 50 and air_hulu > 100 and hujan_hulu > 40):
-        status_final = "SIAGA"
-        estimasi_menit = 45
-        probabilitas = 88.0
+            # Menjalankan prediksi kelas dari model
+            prediksi = model.predict(fitur_input)
+            status_final = str(prediksi[0])
 
-    # Status WASPADA: Air lokal mulai beranjak naik di atas normal, atau hulu mulai kirim air besar
-    elif air_lokal > 40 or (air_hulu > 80 and hujan_hulu > 20):
-        status_final = "WASPADA"
-        estimasi_menit = 120
-        probabilitas = 80.0
+            # Mengambil tingkat keyakinan (probabilitas) jika model mendukungnya
+            if hasattr(model, "predict_proba"):
+                proba = model.predict_proba(fitur_input)
+                probabilitas = float(max(proba[0]) * 100)
 
-    # Status AMAN: Air lokal masih aman dan hulu tidak menunjukkan ancaman drastis
+            # Menentukan estimasi waktu berdasarkan hasil prediksi model
+            if status_final == "BAHAYA":
+                estimasi_menit = 0
+            elif status_final == "SIAGA":
+                estimasi_menit = 45
+            elif status_final == "WASPADA":
+                estimasi_menit = 120
+            else:
+                estimasi_menit = 0
+
+        except Exception as e:
+            print("Error saat eksekusi model Machine Learning:", e)
     else:
         status_final = "AMAN"
-        estimasi_menit = 0
-        probabilitas = 99.0
+        probabilitas = 0.0
 
     if status_final == "AMAN":
         estimasi_menit_output = "-"
@@ -97,15 +109,16 @@ def prediksi_dan_kirim():
 
         "ml_prediksi": status_final,
         "status_final": status_final,
-        "probabilitas_ml": probabilitas,
+        "probabilitas_ml": round(probabilitas, 2),
 
         "estimasi_menit": estimasi_menit_output,
         "estimasi": estimasi,
 
         "waktu_prediksi": waktu,
-        "sumber_data": "Smart Rule-Based (Fokus Air Lokal & Hulu)"
+        "sumber_data": "Trained Machine Learning Model (.pkl)"
     }
 
+    # Mengirim hasil ke Firebase
     db.reference("/banjir/ml").set(hasil_ml)
     db.reference("/banjir/status").set(status_final)
     db.reference("/banjir/update").set(waktu)
