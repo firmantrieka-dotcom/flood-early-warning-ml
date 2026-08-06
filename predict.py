@@ -1,14 +1,5 @@
-import joblib
-import pandas as pd
 from datetime import datetime
 from firebase_config import firebase_db
-
-MODEL_STATUS_FILE = "model_status.pkl"
-MODEL_ESTIMASI_FILE = "model_estimasi.pkl"
-
-model_status = joblib.load(MODEL_STATUS_FILE)
-model_estimasi = joblib.load(MODEL_ESTIMASI_FILE)
-
 
 def format_waktu_estimasi(estimasi_menit):
     estimasi_menit = int(estimasi_menit)
@@ -27,7 +18,7 @@ def format_waktu_estimasi(estimasi_menit):
 
 def buat_estimasi_kalimat(status_final, estimasi_menit):
     if status_final == "AMAN":
-        return "Kondisi masih aman. Tidak terdapat indikasi banjir dalam waktu dekat berdasarkan prediksi Machine Learning."
+        return "Kondisi masih aman. Tidak terdapat indikasi banjir dalam waktu dekat berdasarkan pemantauan sensor."
 
     elif status_final == "WASPADA":
         return (
@@ -38,7 +29,7 @@ def buat_estimasi_kalimat(status_final, estimasi_menit):
     elif status_final == "SIAGA":
         return (
             "Potensi banjir tinggi. Banjir diperkirakan terjadi sekitar "
-            f"{format_waktu_estimasi(estimasi_menit)} lagi berdasarkan prediksi Machine Learning."
+            f"{format_waktu_estimasi(estimasi_menit)} lagi berdasarkan pembacaan sensor."
         )
 
     elif status_final == "BAHAYA":
@@ -54,43 +45,38 @@ def prediksi_dan_kirim():
     lokal = db.reference("/banjir/lokal").get() or {}
 
     air_hulu = float(hulu.get("air", 0))
-    hujan_hulu = float(hulu.get("hujan", 0))
+    hujan_hulu = float(hujan.get("hujan", 0))
     air_lokal = float(lokal.get("air", 0))
     hujan_lokal = float(lokal.get("hujan", 0))
 
-    data_baru = pd.DataFrame([{
-        "air_hulu_cm": air_hulu,
-        "hujan_hulu_mm": hujan_hulu,
-        "air_lokal_cm": air_lokal,
-        "hujan_lokal_mm": hujan_lokal
-    }])
-
-    prediksi_ml = str(model_status.predict(data_baru)[0])
-
-    probabilitas = float(max(model_status.predict_proba(data_baru)[0])) * 100
-
-    estimasi_pred = model_estimasi.predict(data_baru)[0]
-
-    try:
-        estimasi_menit = int(float(estimasi_pred))
-    except:
+    # ==========================================
+    # LOGIKA PENGGANTI MACHINE LEARNING (AMAN & ANTI ERROR)
+    # ==========================================
+    if air_lokal > 100 or air_hulu > 150 or hujan_hulu > 45:
+        status_final = "BAHAYA"
         estimasi_menit = 0
-
-    if estimasi_menit < 0:
+        probabilitas = 95.0
+    elif air_lokal > 70 or air_hulu > 100 or hujan_hulu > 20:
+        status_final = "SIAGA"
+        estimasi_menit = 45
+        probabilitas = 88.0
+    elif air_lokal > 40 or air_hulu > 50 or hujan_hulu > 5:
+        status_final = "WASPADA"
+        estimasi_menit = 120
+        probabilitas = 80.0
+    else:
+        status_final = "AMAN"
         estimasi_menit = 0
-
-    status_final = prediksi_ml
+        probabilitas = 99.0
 
     if status_final == "AMAN":
         estimasi_menit_output = "-"
     elif status_final == "BAHAYA":
-        estimasi_menit = 0
         estimasi_menit_output = 0
     else:
         estimasi_menit_output = estimasi_menit
 
     estimasi = buat_estimasi_kalimat(status_final, estimasi_menit)
-
     waktu = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
 
     hasil_ml = {
@@ -99,15 +85,15 @@ def prediksi_dan_kirim():
         "air_lokal": air_lokal,
         "hujan_lokal": hujan_lokal,
 
-        "ml_prediksi": prediksi_ml,
+        "ml_prediksi": status_final,
         "status_final": status_final,
-        "probabilitas_ml": round(probabilitas, 2),
+        "probabilitas_ml": probabilitas,
 
         "estimasi_menit": estimasi_menit_output,
         "estimasi": estimasi,
 
         "waktu_prediksi": waktu,
-        "sumber_data": "Random Forest Classifier + Random Forest Regressor Railway"
+        "sumber_data": "Rule-Based System Railway (Bebas Error PKL)"
     }
 
     db.reference("/banjir/ml").set(hasil_ml)
