@@ -18,22 +18,22 @@ def format_waktu_estimasi(estimasi_menit):
 
 def buat_estimasi_kalimat(status_final, estimasi_menit):
     if status_final == "AMAN":
-        return "Kondisi masih aman. Tidak terdapat indikasi banjir dalam waktu dekat berdasarkan pemantauan sensor."
+        return "Kondisi masih aman. Tidak terdapat indikasi banjir dalam waktu dekat."
 
     elif status_final == "WASPADA":
         return (
-            "Kondisi mulai meningkat. Banjir diperkirakan terjadi sekitar "
-            f"{format_waktu_estimasi(estimasi_menit)} lagi apabila hujan dan kenaikan air terus berlangsung."
+            "Kondisi mulai meningkat. Air lokal mulai naik, diperkirakan mencapai batas "
+            f"sekitar {format_waktu_estimasi(estimasi_menit)} lagi apabila tren kenaikan berlanjut."
         )
 
     elif status_final == "SIAGA":
         return (
-            "Potensi banjir tinggi. Banjir diperkirakan terjadi sekitar "
-            f"{format_waktu_estimasi(estimasi_menit)} lagi berdasarkan pembacaan sensor."
+            "Potensi banjir tinggi karena kenaikan air lokal dan pengaruh dari hulu. "
+            f"Perkiraan waktu kritis sekitar {format_waktu_estimasi(estimasi_menit)} lagi."
         )
 
     elif status_final == "BAHAYA":
-        return "Banjir sudah terjadi atau kondisi air telah berada pada level bahaya."
+        return "Banjir sudah terjadi atau ketinggian air di pemukiman telah berada pada level bahaya."
 
     return "Status tidak diketahui."
 
@@ -44,27 +44,36 @@ def prediksi_dan_kirim():
     hulu = db.reference("/banjir/hulu").get() or {}
     lokal = db.reference("/banjir/lokal").get() or {}
 
-    # DIPERBAIKI: Mengambil data dari variabel hulu & lokal dengan benar
     air_hulu = float(hulu.get("air", 0))
     hujan_hulu = float(hulu.get("hujan", 0))
     air_lokal = float(lokal.get("air", 0))
     hujan_lokal = float(lokal.get("hujan", 0))
 
     # ==========================================
-    # LOGIKA SISTEM (AMAN & ANTI ERROR)
+    # LOGIKA BARU SESUAI ANALISIS LAPANGAN
+    # Penentu utama: Ketinggian air lokal (pemukiman)
+    # Pendukung: Kondisi air hulu & hujan hulu
     # ==========================================
-    if air_lokal > 100 or air_hulu > 150 or hujan_hulu > 45:
+    
+    # Status BAHAYA: Air lokal sudah sangat tinggi, atau air lokal tinggi dibarengi air hulu ekstrem
+    if air_lokal > 100 or (air_lokal > 80 and air_hulu > 130):
         status_final = "BAHAYA"
         estimasi_menit = 0
         probabilitas = 95.0
-    elif air_lokal > 70 or air_hulu > 100 or hujan_hulu > 20:
+
+    # Status SIAGA: Air lokal mulai naik signifikan, atau air lokal menengah tapi air hulu & hujan hulu sangat tinggi
+    elif air_lokal > 70 or (air_lokal > 50 and air_hulu > 100 and hujan_hulu > 40):
         status_final = "SIAGA"
         estimasi_menit = 45
         probabilitas = 88.0
-    elif air_lokal > 40 or air_hulu > 50 or hujan_hulu > 5:
+
+    # Status WASPADA: Air lokal mulai beranjak naik di atas normal, atau hulu mulai kirim air besar
+    elif air_lokal > 40 or (air_hulu > 80 and hujan_hulu > 20):
         status_final = "WASPADA"
         estimasi_menit = 120
         probabilitas = 80.0
+
+    # Status AMAN: Air lokal masih aman dan hulu tidak menunjukkan ancaman drastis
     else:
         status_final = "AMAN"
         estimasi_menit = 0
@@ -94,7 +103,7 @@ def prediksi_dan_kirim():
         "estimasi": estimasi,
 
         "waktu_prediksi": waktu,
-        "sumber_data": "Rule-Based System Railway (Bebas Error PKL)"
+        "sumber_data": "Smart Rule-Based (Fokus Air Lokal & Hulu)"
     }
 
     db.reference("/banjir/ml").set(hasil_ml)
